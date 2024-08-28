@@ -4,12 +4,9 @@ import sharp from 'sharp';
 import fs from 'fs/promises';
 import { AutoDetectTypes } from '@serialport/bindings-cpp';
 import { EventEmitter } from 'events';
-import chokidar from 'chokidar';
-import path from 'path';
 
 const PROCESSED_IMAGE_PATH = './dist/toPrint.png';
 const PORT_NAME = '/dev/cu.usbserial-21440';
-const PHOTO_BOOTH_DIR = path.join(process.env.HOME || '', 'Pictures', 'Photo Booth Library', 'Pictures');
 
 class SerialPortAdapter extends EventEmitter implements escpos.Adapter {
   device: SerialPort<AutoDetectTypes> | null;
@@ -19,10 +16,9 @@ class SerialPortAdapter extends EventEmitter implements escpos.Adapter {
     var self = this;
     options = options || {
       path: port,
-      // baudRate: 9600,
-      baudRate: 38400,
+      baudRate: 9600,
       databits: 8,
-      autoOpen: false, // Changed to false to manually open for each print job
+      autoOpen: true,
     };
 
     this.device = new SerialPort(options);
@@ -41,32 +37,31 @@ class SerialPortAdapter extends EventEmitter implements escpos.Adapter {
 
     EventEmitter.call(this);
   }
-
   open(callback?: (error?: any) => void): SerialPortAdapter {
     console.log('Attempting to open serial port...');
     this.device && this.device.open(callback);
     return this;
   }
-
   write(data: Buffer, callback?: (error?: any) => void): SerialPortAdapter {
     console.log('Writing data to serial port:', data);
     this.device && this.device.write(data, callback);
 
-    this.device &&
-      this.device.drain(() => {
-        console.log('Drained serial port after writing data');
-      });
+    // Wait for the data to be written before returning
+    this.device && this.device.drain(() => {
+      console.log('Drained serial port after writing data');
+    });
     return this;
   }
-
   close(callback?: (error: any, device: SerialPortAdapter | null) => void, timeout?: number): SerialPortAdapter {
     console.log('Attempting to close serial port...');
     var self = this;
 
     this.device &&
       this.device.drain(() => {
+        console.log('Drained serial port');
         self.device &&
           self.device.flush((err) => {
+            console.log('Flushed serial port');
             setTimeout(
               () => {
                 if (err) {
@@ -77,6 +72,8 @@ class SerialPortAdapter extends EventEmitter implements escpos.Adapter {
                     self.device.close((err) => {
                       if (err) {
                         console.error('Error during closing:', err);
+                      } else {
+                        console.log('Serial port closed');
                       }
                       self.device = null;
                       callback && callback(err, self.device);
@@ -91,11 +88,10 @@ class SerialPortAdapter extends EventEmitter implements escpos.Adapter {
   }
 }
 
-async function processAndPrintImage(imagePath: string) {
-  console.log(`Processing image: ${imagePath}`);
+async function processImage(image_path: string) {
   try {
-    const data = await sharp(imagePath)
-      .resize(256)
+    const data = await sharp(image_path)
+      .resize(128)
       .normalise()
       .greyscale()
       .png({
@@ -103,84 +99,72 @@ async function processAndPrintImage(imagePath: string) {
         colours: 2,
       })
       .toBuffer();
-
     await sharp(data).threshold(128, { grayscale: true }).toFile(PROCESSED_IMAGE_PATH);
-
     console.log('Image processed and saved successfully');
+  } catch (err) {
+    console.error('Error processing image:', err);
+    throw err;
+  }
+}
 
-    const device = new SerialPortAdapter(PORT_NAME);
-    const printer = new escpos.Printer(device, { encoding: 'GB18030' });
-
-    await new Promise<void>((resolve, reject) => {
-      escpos.Image.load(PROCESSED_IMAGE_PATH, (image) => {
-        if (image instanceof Error) {
-          console.error('Error loading image:', image);
-          reject(image);
-          return;
-        }
-        device.open(() => {
-          printer.align('CT').image(image, 'D24');
-          printer.feed(2).cut().flush(() => {
-            console.log('Image printed successfully');
-            // Close the connection after printing
-            setTimeout(() => {
-              printer.close((err) => {
-                if (err) {
-                  console.error('Error closing device:', err);
-                }
-                resolve();
-              });
-              // 256w image takes about 10 seconds to print from mac
-            }, 10000);
-          });
-        });
-      });
+function loadImage(filePath: string): Promise<Image> {
+  return new Promise((resolve, reject) => {
+    escpos.Image.load(filePath, (image) => {
+      if (image instanceof Error) {
+        reject(image);
+      } else {
+        resolve(image);
+      }
     });
+  });
+}
 
-    // Delete the processed image after printing
+async function printImage(image_path: string, printer: escpos.Printer) {
+  try {
+    await processImage(image_path);
+
+    const image = await loadImage(PROCESSED_IMAGE_PATH);
+    console.log('Image loaded successfully');
+    printer.font('B').align('CT').image(image, 'D24');
+    console.log('Image printed successfully');
+
+    // Clean up the temporary processed image file
+    console.log('Cleaning up temporary files...');
     await fs.unlink(PROCESSED_IMAGE_PATH);
+    console.log('Temporary files cleaned up successfully');
   } catch (error) {
-    console.error('An error occurred while processing and printing the image:', error);
+    console.error('An error occurred during image processing or printing:', error);
   }
 }
 
 async function main() {
-  console.log('Starting Photo Booth Printer...');
+  console.log('Starting...');
   try {
-    // Set up file watcher
-    const watcher = chokidar.watch(PHOTO_BOOTH_DIR, {
-      ignored: /(^|[\/\\])\../, // ignore dotfiles
-      persistent: true,
-      awaitWriteFinish: true,
-    });
+    const device = new SerialPortAdapter(PORT_NAME);
+    const printer = new escpos.Printer(device, { encoding: 'GB18030' });
 
-    // Wait for the initial scan to complete
-    await new Promise<void>((resolve) => {
-      watcher.on('ready', () => {
-        console.log('Initial scan complete. Ready to watch for new images.');
-        resolve();
-      });
-    });
+    await printImage('./img/1758.jpg', printer);
 
-    // Now start watching for new files
-    watcher
-      .on('add', async (filePath) => {
-        console.log(`New image detected: ${filePath}`);
-        await processAndPrintImage(filePath);
-      })
-      .on('error', (error) => console.error(`Watcher error: ${error}`));
+    console.log('Printing text...');
+    printer
+      .font('B')
+      .align('CT')
+      .style('NORMAL')
+      .size(1, 1)
+      .text('Hello, World!')
+      .text('Hello, World!')
+      .text('Hello')
+      .feed(3);
 
-    console.log(`Watching for new images in: ${PHOTO_BOOTH_DIR}`);
+    await printImage('./img/1758.jpg', printer);
 
-    // Keep the script running
-    process.stdin.resume();
+    printer.cut().flush(() => {
+      console.log('Finished printing');
+      // device.close();
+    })
 
-    // Handle graceful shutdown
-    process.on('SIGINT', () => {
-      console.log('Shutting down...');
-      watcher.close();
-      process.exit(0);
-    });
+    // printer.close();
+
   } catch (error) {
     console.error('An error occurred:', error);
   }

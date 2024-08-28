@@ -6,13 +6,14 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "start": "node dist/main.js",
-    "dev": "npx ts-node src/main.ts"
+    "dev": "npm run build && npm run start"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
     "@types/escpos": "^2.5.5",
+    "chokidar": "^3.6.0",
     "escpos": "^3.0.0-alpha.6",
     "escpos-serialport": "^3.0.0-alpha.4",
     "escpos-usb": "^3.0.0-alpha.4",

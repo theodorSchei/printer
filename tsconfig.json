@@ -10,5 +10,5 @@
   },
   "include": ["./src/**/*.ts"],
   "exclude": ["node_modules"],
-  "files": ["./src/main.ts"]
+  "files": ["src/old.ts"]
 }
