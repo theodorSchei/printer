@@ -5,7 +5,7 @@ import fs from 'fs/promises';
 import { AutoDetectTypes } from '@serialport/bindings-cpp';
 import { EventEmitter } from 'events';
 
-const PROCESSED_IMAGE_PATH = './toPrint.png';
+const PROCESSED_IMAGE_PATH = './dist/toPrint.png';
 const PORT_NAME = '/dev/cu.usbserial-21440';
 
 class SerialPortAdapter extends EventEmitter implements escpos.Adapter {
@@ -24,42 +24,67 @@ class SerialPortAdapter extends EventEmitter implements escpos.Adapter {
     this.device = new SerialPort(options);
 
     this.device.on('open', () => console.log('Serial port opened successfully'));
+    this.device.on('data', (data) => console.log('Received data:', data.toString()));
+    this.device.on('error', (err) => {
+      console.error('Serial port error:', err.message);
+      self.emit('disconnect', this.device);
+    });
     this.device.on('close', () => {
       console.log('Serial port closed successfully');
       self.emit('disconnect', this.device);
       self.device = null;
     });
-    this.device.on('data', (data) => console.log('Received data:', data.toString()));
-    this.device.on('error', (err) => console.error('Serial port error:', err.message));
 
     EventEmitter.call(this);
   }
   open(callback?: (error?: any) => void): SerialPortAdapter {
+    console.log('Attempting to open serial port...');
     this.device && this.device.open(callback);
     return this;
   }
   write(data: Buffer, callback?: (error?: any) => void): SerialPortAdapter {
+    console.log('Writing data to serial port:', data);
     this.device && this.device.write(data, callback);
+
+    // Wait for the data to be written before returning
+    this.device && this.device.drain(() => {
+      console.log('Drained serial port after writing data');
+    });
+
+    // Wait for the printer to finish processing the data before returning
+
+
     return this;
   }
   close(callback?: (error: any, device: SerialPortAdapter | null) => void, timeout?: number): SerialPortAdapter {
+    console.log('Attempting to close serial port...');
     var self = this;
 
     this.device &&
       this.device.drain(() => {
+        console.log('Drained serial port');
         self.device &&
           self.device.flush((err) => {
+            console.log('Flushed serial port');
             setTimeout(
               () => {
-                err
-                  ? callback && callback(err, self)
-                  : self.device &&
-                    self.device.close(function (err) {
+                if (err) {
+                  console.error('Error during flushing:', err);
+                  callback && callback(err, self);
+                } else {
+                  self.device &&
+                    self.device.close((err) => {
+                      if (err) {
+                        console.error('Error during closing:', err);
+                      } else {
+                        console.log('Serial port closed');
+                      }
                       self.device = null;
-                      return callback && callback(err, self.device);
+                      callback && callback(err, self.device);
                     });
+                }
               },
-              'number' === typeof timeout && 0 < timeout ? timeout : 0,
+              typeof timeout === 'number' && timeout > 0 ? timeout : 0,
             );
           });
       });
@@ -122,7 +147,7 @@ async function main() {
     const device = new SerialPortAdapter(PORT_NAME);
     const printer = new escpos.Printer(device, { encoding: 'GB18030' });
 
-    await printImage('./1758.jpg', printer);
+    await printImage('./img/1758.jpg', printer);
 
     console.log('Printing text...');
     printer
@@ -133,13 +158,17 @@ async function main() {
       .text('Hello, World!')
       .text('Hello, World!')
       .text('Hello')
-      .feed(3)
-      .cut(true)
-      .flush(() => {
-        console.log('Printer flushed');
-      });
+      .feed(3);
 
-    await printImage('./1758.jpg', printer);
+    await printImage('./img/1758.jpg', printer);
+
+    printer.cut().flush(() => {
+      console.log('Finished printing');
+      // device.close();
+    })
+
+    // printer.close();
+
   } catch (error) {
     console.error('An error occurred:', error);
   }
