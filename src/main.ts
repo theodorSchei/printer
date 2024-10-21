@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import fs from 'fs/promises';
 
 const PROCESSED_IMAGE_PATH = './dist/toPrint.png';
-const PORT_NAME = '/dev/tty.usbserial-B003KW0I';
+const PORT_NAME = '/dev/ttyUSB0';
 
 async function processImage(image_path: string) {
   try {
@@ -25,9 +25,9 @@ async function processImage(image_path: string) {
   }
 }
 
-function loadImage(filePath: string): Promise<Image> {
+function loadImage(): Promise<Image> {
   return new Promise((resolve, reject) => {
-    escpos.Image.load(filePath, (image) => {
+    escpos.Image.load(PROCESSED_IMAGE_PATH, (image) => {
       if (image instanceof Error) {
         reject(image);
       } else {
@@ -41,8 +41,8 @@ async function printImage(image_path: string, printer: escpos.Printer) {
   try {
     await processImage(image_path);
 
-    const image = await loadImage(PROCESSED_IMAGE_PATH);
-    
+    const image = await loadImage();
+
     console.log('Image loaded successfully');
     printer.font('B').align('CT').image(image, 'D24');
     console.log('Image printed successfully');
@@ -54,6 +54,10 @@ async function printImage(image_path: string, printer: escpos.Printer) {
   } catch (error) {
     console.error('An error occurred during image processing or printing:', error);
   }
+}
+
+async function captureAndPrint(printer: escpos.Printer) {
+  
 }
 
 async function main() {
@@ -73,12 +77,19 @@ async function main() {
 
     const printer = new escpos.Printer(device as unknown as Adapter);
 
-    console.log('Printing text...');
-    await printer.font('B').align('CT').style('NORMAL').size(1, 1).text('Hello').feed(3);
-    console.log('Text printed successfully');
 
-    await printImage('./img/photo2.jpg', printer);
-    printer.flush();
+    await printImage('./img/1758.jpg', printer);
+    printer
+      .flush()
+      .feed()
+      .font('B')
+      .align('CT')
+      .style('NORMAL')
+      .size(1, 1)
+      .text('Fagdagen 25.10.2025')
+      .feed(3);
+
+    console.log('Text printed successfully');
 
     printer.cut(true, 2).flush(() => {
       console.log('Finished printing');

@@ -16,6 +16,7 @@
     "escpos": "^3.0.0-alpha.6",
     "escpos-serialport": "^3.0.0-alpha.4",
     "escpos-usb": "^3.0.0-alpha.4",
+    "onoff": "^6.0.3",
     "sharp": "^0.33.5"
   },
   "devDependencies": {
