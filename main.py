@@ -4,17 +4,17 @@ from PIL import Image
 import io
 
 # Constants
-IMAGE_PATH = "./1758.jpg"
-PROCESSED_IMAGE_PATH = "./toPrint.png"
-PORT_NAME = "COM4"
-PORT_NAME = '/dev/cu.usbserial-21430'
-
+IMAGE_PATH = "./img/1758.jpg"
+PROCESSED_IMAGE_PATH = "./dist/toPrint.png"
+# PORT_NAME = "COM4"
+# PORT_NAME = '/dev/cu.usbserial-21430'
+PORT_NAME = '/dev/ttyUSB0'
 
 async def process_image():
     try:
         with Image.open(IMAGE_PATH) as img:
             # Resize, convert to grayscale
-            img = img.resize((128, 128)).convert("L")
+            img = img.resize((512, 512)).convert("L")
 
             # Apply threshold
             img = img.point(lambda x: 0 if x < 128 else 255, "1")
@@ -33,7 +33,7 @@ async def print_image():
         # Initialize the printer
         printer = Serial(
             devfile=PORT_NAME,
-            baudrate=9600,
+            baudrate=115200,
             bytesize=8,
             parity="N",
             stopbits=1,

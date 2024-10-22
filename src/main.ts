@@ -2,8 +2,11 @@ import escpos, { Adapter, Image } from 'escpos';
 import { SerialPort } from 'serialport';
 import sharp from 'sharp';
 import fs from 'fs/promises';
+import util from 'util';
+const exec = util.promisify(require('child_process').exec);
 
 const PROCESSED_IMAGE_PATH = './dist/toPrint.png';
+const LAST_IMAGE_PATH = './img/capture.jpg';
 const PORT_NAME = '/dev/ttyUSB0';
 
 async function processImage(image_path: string) {
@@ -44,20 +47,31 @@ async function printImage(image_path: string, printer: escpos.Printer) {
     const image = await loadImage();
 
     console.log('Image loaded successfully');
-    printer.font('B').align('CT').image(image, 'D24');
+    printer.image(image, 'D24');
     console.log('Image printed successfully');
-
-    // Clean up the temporary processed image file
-    console.log('Cleaning up temporary files...');
-    await fs.unlink(PROCESSED_IMAGE_PATH);
-    console.log('Temporary files cleaned up successfully');
   } catch (error) {
     console.error('An error occurred during image processing or printing:', error);
   }
 }
 
 async function captureAndPrint(printer: escpos.Printer) {
-  
+
+  console.log("Capturing image");
+  const { stdout, stderr } = await exec(`rpicam-jpeg --output ${LAST_IMAGE_PATH} --immediate -t 3000 --hflip --fullscreen --ev 9 --brightness 0.5 --rotation 180 `);
+  await printLastCapture(printer);
+}
+
+async function printLastCapture(printer: escpos.Printer) {
+  try {
+    console.log('Processing image');
+    await processImage(LAST_IMAGE_PATH);
+    console.log('Loading image');
+    const image = await loadImage();
+    console.log('Printing image');
+    printer.font('B').align('CT').image(image, 'D24');
+  } catch (error) {
+    console.error('An error occurred during image processing or printing:', error);
+  }
 }
 
 async function main() {
@@ -79,15 +93,19 @@ async function main() {
 
 
     await printImage('./img/1758.jpg', printer);
+
+    // await captureAndPrint(printer)
+
     printer
-      .flush()
-      .feed()
-      .font('B')
-      .align('CT')
-      .style('NORMAL')
-      .size(1, 1)
-      .text('Fagdagen 25.10.2025')
-      .feed(3);
+      .flush(() =>
+        printer.feed()
+          .font('B')
+          .align('CT')
+          .style('NORMAL')
+          .size(1, 1)
+          .text('Fagdagen 25.10.2025')
+          .feed(3));
+
 
     console.log('Text printed successfully');
 
