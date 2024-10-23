@@ -14,6 +14,7 @@
   "dependencies": {
     "@types/escpos": "^2.5.5",
     "escpos": "^3.0.0-alpha.6",
+    "escpos-network": "^3.0.0-alpha.5",
     "escpos-serialport": "^3.0.0-alpha.4",
     "escpos-usb": "^3.0.0-alpha.4",
     "onoff": "^6.0.3",

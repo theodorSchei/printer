@@ -1,6 +1,5 @@
 from PIL import Image
 
-
 PROCESSED_IMAGE_PATH = "./dist/toPrint.png"
 
 async def process_image(image_path):
@@ -17,7 +16,7 @@ async def process_image(image_path):
 
         print("Image processed and saved successfully")
 
-				return PROCESSED_IMAGE_PATH
+        return PROCESSED_IMAGE_PATH
     except Exception as e:
         print(f"Error processing image: {e}")
         raise
