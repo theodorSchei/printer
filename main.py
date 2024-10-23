@@ -1,32 +1,64 @@
 import asyncio
-from escpos.printer import Network
 from PIL import Image
-import io
+from escpos.printer import Network
 import numpy as np
+import os
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from datetime import datetime
+import time
+from pathlib import Path
 
-# Constants
-IMAGE_PATH = "./img/photo2.jpg"
-PROCESSED_IMAGE_PATH = "./dist/toPrint.png"
-# PORT_NAME = "COM4"
-# PORT_NAME = '/dev/cu.usbserial-21430'
-PORT_NAME = "/dev/ttyUSB0"
-PORT_NAME = "/dev/tty.usbserial-B003KW0I"
+
+class PhotoBoothHandler(FileSystemEventHandler):
+    def __init__(self, printer):
+        self.printer = printer
+        self.processing = False
+        # Keep track of processed files
+        self.processed_files = set()
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        if event.src_path.lower().endswith((".jpg", ".jpeg", ".png")):
+            # Wait a brief moment to ensure the file is completely written
+            time.sleep(1)
+            asyncio.run(self.process_and_print(event.src_path))
+
+    async def process_and_print(self, image_path):
+        if image_path in self.processed_files:
+            return
+
+        try:
+            print(f"Processing new image: {image_path}")
+            self.processing = True
+
+            # Process the image
+            processed_path = await process_image(image_path)
+
+            # Print the image
+            await print_image(self.printer, processed_path)
+
+            # Print footer with timestamp
+            await print_footer(self.printer)
+
+            # Mark file as processed
+            self.processed_files.add(image_path)
+            print(f"Successfully printed image: {image_path}")
+
+        except Exception as e:
+            print(f"Error processing/printing image: {e}")
+        finally:
+            self.processing = False
 
 
 def floyd_steinberg_dithering(image):
     """
     Apply Floyd-Steinberg dithering to an image.
-
-    Args:
-        image: PIL Image in "L" (grayscale) mode
-    Returns:
-        PIL Image with dithering applied
     """
-    # Convert image to numpy array
     img_array = np.array(image, dtype=float)
     height, width = img_array.shape
 
-    # Process each pixel
     for y in range(height):
         for x in range(width):
             old_pixel = img_array[y, x]
@@ -35,7 +67,6 @@ def floyd_steinberg_dithering(image):
 
             error = old_pixel - new_pixel
 
-            # Distribute error to neighboring pixels
             if x + 1 < width:
                 img_array[y, x + 1] += error * 7 / 16
             if y + 1 < height:
@@ -48,11 +79,21 @@ def floyd_steinberg_dithering(image):
     return Image.fromarray(img_array.astype(np.uint8))
 
 
-async def process_image():
+async def process_image(image_path):
+    """
+    Process a single image for printing.
+    Returns the path to the processed image.
+    """
     try:
-        with Image.open(IMAGE_PATH) as img:
+        # Create dist directory if it doesn't exist
+        os.makedirs("dist", exist_ok=True)
+
+        # Generate unique filename for processed image
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        processed_path = f"dist/processed_{timestamp}.png"
+
+        with Image.open(image_path) as img:
             # Resize image
-            # Calculate height to maintain aspect ratio
             width = 512
             ratio = width / img.size[0]
             height = int(img.size[1] * ratio)
@@ -68,40 +109,70 @@ async def process_image():
             dithered = dithered.convert("1")
 
             # Save processed image
-            dithered.save(PROCESSED_IMAGE_PATH)
+            dithered.save(processed_path)
 
-        print("Image processed and saved successfully")
+        print(f"Image processed and saved to {processed_path}")
+        return processed_path
     except Exception as e:
         print(f"Error processing image: {e}")
         raise
 
 
-async def print_image(printer: Network):
+async def print_image(printer, image_path):
+    """Print a single image."""
     try:
-        # Load and print the image
-        printer.image(PROCESSED_IMAGE_PATH)
+        printer.image(image_path)
         print("Image printed successfully")
     except Exception as e:
         print(f"Error printing image: {e}")
+        raise
 
 
-async def print_footer(printer: Network):
+async def print_footer(printer):
+    """Print footer with timestamp."""
     try:
         printer.ln(2)
         printer.set(font="a", align="center", width=2, height=2)
-        printer.text("Fagdagen 25.10.2025")
+        timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
+        printer.text(f"Bekk fagdagen 25.10.2024 <3")
         printer.ln()
         printer.cut()
     except Exception as e:
         print(f"Error printing footer: {e}")
+        raise
 
 
 async def main():
+    # Printer configuration
+    PRINTER_IP = "192.168.0.237"
+    PHOTO_BOOTH_DIR = str(Path.home() / "Pictures/Photo Booth-bibliotek/Pictures")
+
     try:
-        printer = Network("192.168.0.237")
-        await process_image()
-        await print_image(printer)
-        await print_footer(printer)
+        # Initialize printer
+        printer = Network(PRINTER_IP)
+        print(f"Connecting to printer at {PRINTER_IP}")
+
+        # Create and configure the event handler
+        event_handler = PhotoBoothHandler(printer)
+
+        # Set up the observer
+        observer = Observer()
+        observer.schedule(event_handler, PHOTO_BOOTH_DIR, recursive=False)
+        observer.start()
+
+        print(f"Monitoring directory: {PHOTO_BOOTH_DIR}")
+        print("Waiting for new photos... (Press Ctrl+C to stop)")
+
+        # Keep the script running
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            observer.stop()
+            print("\nStopping monitor...")
+
+        observer.join()
+
     except Exception as e:
         print(f"An error occurred: {e}")
 

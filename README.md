@@ -16,7 +16,7 @@ ls /dev/cu.*
 python3 -m venv ./venv
 
 # installer deps
-./venv/bin/pip3 install escpos image
+./venv/bin/pip3 install escpos image watchdog numpy
 
 # Kjør main
 ./venv/bin/python3 main.py 
