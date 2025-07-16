@@ -1,25 +1,26 @@
 # Printer
+Program som printer ut bilder fra en gitt mappe fortløpende på en kvitteringsprinter.
 
+## Sette opp python
 
-
-# Finne printer på mac:
+Har tatt i bruk uv for første gang som skal gjøre det enkelt å få opp å kjøre
 ```zsh
-ls /dev/tty.* 
-ls /dev/cu.* 
-# Aner ikke forskjellen her^
+uv run main.py
 ```
 
-# Sette opp python
+## Split routing
+
+For å kunne sende trafikk til printeren over ethernet, men resten av trafikken på vanlig wifi må man sette opp noen spesifikke routes.
 
 ```zsh
-# Lage venv
-python3 -m venv ./venv
+# Finne riktig interface
+netstat -rn
 
-# installer deps
-./venv/bin/pip3 install escpos image watchdog numpy
+# Legg til route mot printers ip på riktig interface
+sudo route add -host <printer-ip> -interface <interface> 
+# sudo route add -host 192.168.0.237 -interface en7 
 
-# Kjør main
-./venv/bin/python3 main.py 
+# Tømme arp-cache
+sudo arp -d 192.168.0.237
 ```
-
 

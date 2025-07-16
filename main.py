@@ -1,13 +1,14 @@
 import asyncio
-from PIL import Image
-from escpos.printer import Network
-import numpy as np
 import os
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from datetime import datetime
 import time
+from datetime import datetime
 from pathlib import Path
+
+import numpy as np
+from escpos.printer import Network
+from PIL import Image
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 
 class PhotoBoothHandler(FileSystemEventHandler):
@@ -133,8 +134,8 @@ async def print_footer(printer):
     try:
         printer.ln(2)
         printer.set(font="a", align="center", width=2, height=2)
-        timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
-        printer.text(f"Bekk fagdagen 25.10.2024 <3")
+        # timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
+        printer.text("Sommerfagkveld 23.07.25 <3")
         printer.ln()
         printer.cut()
     except Exception as e:
@@ -145,12 +146,13 @@ async def print_footer(printer):
 async def main():
     # Printer configuration
     PRINTER_IP = "192.168.0.237"
-    PHOTO_BOOTH_DIR = str(Path.home() / "Pictures/Photo Booth-bibliotek/Pictures")
+    PHOTO_BOOTH_DIR = str(Path.home() / "Pictures/Photo Booth Library/Pictures")
 
     try:
         # Initialize printer
-        printer = Network(PRINTER_IP)
         print(f"Connecting to printer at {PRINTER_IP}")
+        printer = Network(PRINTER_IP)
+        print("Printer connected successfully")
 
         # Create and configure the event handler
         event_handler = PhotoBoothHandler(printer)
