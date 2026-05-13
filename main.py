@@ -21,7 +21,7 @@ class PhotoBoothHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
-        if event.src_path.lower().endswith((".jpg", ".jpeg", ".png")):
+        if isinstance(event.src_path, str) and event.src_path.lower().endswith((".jpg", ".jpeg", ".png")):
             # Wait a brief moment to ensure the file is completely written
             time.sleep(1)
             asyncio.run(self.process_and_print(event.src_path))
